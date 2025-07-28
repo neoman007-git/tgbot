@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: binance-fastapi
+    env: python
+    plan: starter            # ← upgraded plan
+    pythonVersion: "3.12"    # reproducible builds
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip uninstall -y telegram        # remove wrong package if present
+      pip install -r requirements.txt
+
+    startCommand: >
+      uvicorn main:app --host 0.0.0.0 --port 10000
+
+    # persistent SQLite file lives here
+    disk:
+      name: rfq-data
+      mountPath: /db
+      sizeGB: 1
+
+    # (Optional) If you’d like to allow one replica only, comment out autoscaling.
+    # autoscaling:
+    #   minInstances: 1
+    #   maxInstances: 1
