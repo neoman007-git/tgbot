@@ -803,3 +803,69 @@ async def price_equity(symbol: str):
         }
     except KeyError:
         raise HTTPException(status_code=400, detail=f"Invalid response from Polygon for symbol '{symbol}'.")
+
+
+# Add this endpoint to your main.py file
+
+@app.get("/deribit/book/{instrument_id}")
+async def deribit_top_of_book(instrument_id: str):
+    """
+    Get top of book (best bid/ask) from Deribit for a given instrument
+    Example: /deribit/book/BTC-PERPETUAL
+    """
+    url = f"https://www.deribit.com/api/v2/public/get_order_book"
+    params = {
+        "instrument_name": instrument_id,
+        "depth": 1  # Only get top of book
+    }
+
+    async with httpx.AsyncClient() as c:
+        r = await c.get(url, params=params, timeout=10)
+
+    if r.status_code != 200:
+        raise HTTPException(502, "Deribit API unavailable")
+
+    data = r.json()
+
+    # Check if API returned an error
+    if "error" in data:
+        raise HTTPException(400, f"Deribit API error: {data['error']['message']}")
+
+    result = data.get("result", {})
+    bids = result.get("bids", [])
+    asks = result.get("asks", [])
+
+    if not bids or not asks:
+        raise HTTPException(400, "No bid/ask data available")
+
+    # Get top of book
+    best_bid_price = bids[0][0] if bids else None
+    best_bid_qty = bids[0][1] if bids else None
+    best_ask_price = asks[0][0] if asks else None
+    best_ask_qty = asks[0][1] if asks else None
+
+    # Calculate mid price and spread
+    mid_price = None
+    spread = None
+    spread_bps = None
+
+    if best_bid_price and best_ask_price:
+        mid_price = (best_bid_price + best_ask_price) / 2
+        spread = best_ask_price - best_bid_price
+        spread_bps = round((spread / mid_price) * 10000, 2)
+
+    return {
+        "instrument": instrument_id,
+        "timestamp": result.get("timestamp"),
+        "bid": {
+            "price": best_bid_price,
+            "quantity": best_bid_qty
+        },
+        "ask": {
+            "price": best_ask_price,
+            "quantity": best_ask_qty
+        },
+        "mid_price": mid_price,
+        "spread": spread,
+        "spread_bps": spread_bps
+    }
